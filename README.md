@@ -3,7 +3,8 @@ This is an OpenGL-based Mahjong implementation written in Python. I've created
 this a few years back and it's playable, but not really finished. Recently I
 wanted to play Mahjong again and noticed that, while this was quite a lot of
 work, I've never published any of it. Therefore I did some very rough cleaning
-up and push it onto GitHub in the hope that it will be useful.
+up and push it onto GitHub in the hope that it will be useful. [Here's a
+screenshot](https://johndoe31415.github.io/pyglmahjong/).
 
 # Challenges
 It is surprisingly difficult to create a Mahjong board that is guaranteed to be
