@@ -1,0 +1,94 @@
+#!/usr/bin/python3
+#
+#	pyglmahjong - Python OpenGL Mahjong and Shisen implementation
+#	Copyright (C) 2015-2018 Johannes Bauer
+#
+#	This file is part of pyglmahjong.
+#
+#	pyglmahjong is free software; you can redistribute it and/or modify
+#	it under the terms of the GNU General Public License as published by
+#	the Free Software Foundation; this program is ONLY licensed under
+#	version 3 of the License, later versions are explicitly excluded.
+#
+#	pyglmahjong is distributed in the hope that it will be useful,
+#	but WITHOUT ANY WARRANTY; without even the implied warranty of
+#	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#	GNU General Public License for more details.
+#
+#	You should have received a copy of the GNU General Public License
+#	along with pyglmahjong; if not, write to the Free Software
+#	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+#	Johannes Bauer <JohannesBauer@gmx.de>
+
+import os
+import subprocess
+import collections
+from TempFile import TempFile
+
+Size = collections.namedtuple("Size", [ "width", "height" ])
+Offset = collections.namedtuple("Offset", [ "x", "y" ])
+
+def svg_to_png(svgfile, pngfile, dpi):
+	subprocess.check_call(["inkscape", "-e", pngfile, "-d", str(dpi), svgfile ])
+
+def get_png_extents(pngfile):
+	out = subprocess.check_output(["identify", pngfile ])
+	out = out.decode("utf-8")
+	out = out.split()[3].split("+")[0].split("x")
+	out = Size(*[ int(x) for x in out ])
+	return out
+
+def clip_offset(offset, size, clip, aspect):
+	frame = round(min(size.width * clip, size.height * clip))
+	framex, framey = (frame, frame)
+
+	newwidth = size.width - (2 * frame)
+	newheight = size.height - (2 * frame)
+
+	newaspect = newwidth / newheight
+	if newaspect > aspect:
+		raise Exception(NotImplemented)
+	else:
+		newheight = round(newwidth / aspect)
+		framey = round((size.height - newheight) / 2)
+
+	newsize = Size(newwidth, newheight)
+	newoffset = Offset(offset.x + framex, offset.y + framey)
+	print("Clip frame %d px, new: %s %s" % (frame, str(newoffset), str(newsize)))
+	return (newoffset, newsize)
+
+dpi = 300
+texture_resolution = 512
+texture_format = "jpg"
+background = "template_uvs.png"
+svgdir = "svg/"
+outdir = "out_tex/%d/" % (texture_resolution)
+target_offset = Offset(x = 520, y = 283)
+target_size = Size(width = 295, height = 522)
+(target_offset, target_size) = clip_offset(target_offset, target_size, 0.05, 1 / 1.618)
+
+try:
+	os.makedirs(outdir)
+except FileExistsError:
+	pass
+
+
+for filename in os.listdir(svgdir):
+	infilename = svgdir + filename
+	outfilename = outdir + filename.replace(".svg", "." + texture_format)
+	print(infilename, outfilename)
+
+	tempfile = TempFile(suffix = ".png")
+	with tempfile:
+		svg_to_png(infilename, tempfile.filename, dpi)
+		extents = get_png_extents(tempfile.filename)
+		if extents.width < target_size.width:
+			print("Extent width too small for target (is %d, need %d), will have reduced quality." % (extents.width, target_size.width))
+		if extents.height < target_size.height:
+			print("Extent height too small for target (is %d, need %d), will have reduced quality." % (extents.height, target_size.height))
+
+		cmd = [ "convert", background, tempfile.filename, "-geometry", "%dx%d+%d+%d" % (target_size.width, target_size.height, target_offset.x, target_offset.y), "-composite", "-flatten", "-geometry", "%dx%d" % (texture_resolution, texture_resolution), "-flip", outfilename ]
+		print(" ".join(cmd))
+		subprocess.check_call(cmd)
+

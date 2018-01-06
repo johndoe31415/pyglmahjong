@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<tileset>
+	<matchingtiles><tile name="default/tile_1" /></matchingtiles>
+	<matchingtiles>
+		<tile name="default/tile_foo" />
+		<tile name="default/tile_bar" />
+	</matchingtiles>
+</tileset>

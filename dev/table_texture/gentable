@@ -1,0 +1,6 @@
+#!/bin/bash
+
+inkscape -d 150 -e table_.png table.svg
+rm -f table.png
+convert table_.png -crop 85x127+255+126 +repage -flatten -depth 24 table.png
+rm -f table_.png

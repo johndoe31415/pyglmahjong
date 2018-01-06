@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<layout grid="2" name="Test">
+	<piece x="0" y="0" z="3" />
+	<piece x="2" y="0" z="2" />
+	<piece x="2" y="0" z="4" />
+	<piece x="3" y="0" z="0" />
+	<piece x="3" y="0" z="6" />
+	<piece x="4" y="0" z="2" />
+	<piece x="4" y="0" z="4" />
+	<piece x="6" y="0" z="3" />
+</layout>

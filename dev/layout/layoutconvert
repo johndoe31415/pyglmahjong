@@ -1,0 +1,253 @@
+#!/usr/bin/python3
+#
+#	pyglmahjong - Python OpenGL Mahjong and Shisen implementation
+#	Copyright (C) 2015-2018 Johannes Bauer
+#
+#	This file is part of pyglmahjong.
+#
+#	pyglmahjong is free software; you can redistribute it and/or modify
+#	it under the terms of the GNU General Public License as published by
+#	the Free Software Foundation; this program is ONLY licensed under
+#	version 3 of the License, later versions are explicitly excluded.
+#
+#	pyglmahjong is distributed in the hope that it will be useful,
+#	but WITHOUT ANY WARRANTY; without even the implied warranty of
+#	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#	GNU General Public License for more details.
+#
+#	You should have received a copy of the GNU General Public License
+#	along with pyglmahjong; if not, write to the Free Software
+#	Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+#
+#	Johannes Bauer <JohannesBauer@gmx.de>
+
+import sys
+import random
+import math
+import collections
+
+from XMLParser import XMLParser, XMLNode
+
+Tile = collections.namedtuple("Tile", [ "x", "y", "z" ])
+
+#svgfilename = "layout_test.svg"
+#xmlfilename = "layout_test.xml"
+
+(svgfilename, xmlfilename, name) = sys.argv[1:]
+#svgfilename = "layout_basic.svg"
+#xmlfilename = "layout_basic.xml"
+
+#svgfilename = "layout_4bridge.svg"
+#xmlfilename = "layout_4bridge.xml"
+gridtiles = 2
+#name = "Basic"
+
+xml = XMLParser().parsefile(svgfilename)
+
+stroke = 0
+tilezero = xml.g[0].rect[0]
+(tileoffsx, tileoffsy) = (float(tilezero["x"]), float(tilezero["y"]))
+(tilewidth, tileheight) = (float(tilezero["width"]) + stroke, float(tilezero["height"]) + stroke)
+
+class Transformation(object):
+	def __init__(self, xform):
+		self._xform = [ self._parse(step) for step in xform if step is not None ]
+
+	@staticmethod
+	def _parse(step):
+		if step.startswith("translate("):
+			step = [ float(x) for x in step[10:-1].split(",") ]
+			assert(len(step) == 2)
+			return [ [ 1, 0, step[0] ], [ 0, 1, step[1] ], [ 0, 0, 1 ]]
+		elif step.startswith("matrix("):
+			step = [ float(x) for x in step[7:-1].split(",") ]
+			assert(len(step) == 6)
+			return [ [ step[0], step[2], step[4] ], [ step[1], step[3], step[5] ], [ 0, 0, 1 ]]
+		elif step.startswith("scale("):
+			step = [ float(x) for x in step[6:-1].split(",") ]
+			assert(len(step) == 2)
+			return [ [ step[0], 0, 0 ], [ 0, step[1], 0 ], [ 0, 0, 1 ]]
+		else:
+			print(step)
+			raise Exception(NotImplemented)
+
+	@staticmethod
+	def _apply(matrix, x, y):
+		newx = (matrix[0][0] * x) + (matrix[0][1] * y) + (matrix[0][2] * 1)
+		newy = (matrix[1][0] * x) + (matrix[1][1] * y) + (matrix[1][2] * 1)
+		return (newx, newy)
+
+	def applyto(self, x, y):
+		for step in self._xform[::-1]:
+			(x, y) = self._apply(step, x, y)
+		return (x, y)
+
+class LayerTraverser(object):
+	def __init__(self, layer):
+		self._transformations = [ ]
+		self._coords = [ ]
+		self._traverse(layer)
+
+	def _traverse(self, node = None):
+		self._transformations.append(node.get("transform"))
+		
+		if node.getname() == "rect":
+			(x, y) = (float(node["x"]), float(node["y"]))
+			(w, h) = (float(node["width"]), float(node["height"]))
+			(x1, y1) = Transformation(self._transformations).applyto(x, y)
+			(x2, y2) = Transformation(self._transformations).applyto(x + w, y + h)
+			(x, y) = (min(x1, x2), min(y1, y2))
+			self._coords.append((x, y))
+		
+		for child in node.getallchildren():
+			self._traverse(child)
+
+		self._transformations.pop()
+
+
+	@property
+	def result(self):
+		return self._coords
+
+class TSP(object):
+	def __init__(self):
+		self._points = [ ]
+
+	@staticmethod
+	def _calcdist(permutation):
+		pathlen = 0
+		for ((x1, y1, node), (x2, y2, node)) in zip(permutation, permutation[1:]):
+			pathlen += math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
+		return pathlen
+
+	def register(self, x, y, node):
+		self._points.append((x, y, node))
+
+	def __iter__(self):
+		for (x, y, tile) in self._points:
+			yield tile
+
+	def _improve(self):
+		(i1, i2) = random.sample(range(len(self._points)), 2)
+
+		newperm = list(self._points)
+		tmp = newperm[i1]
+		newperm[i1] = newperm[i2]
+		newperm[i2] = tmp
+
+		newdist = self._calcdist(newperm)
+		if newdist < self._dist:
+#			print(newdist)
+			self._dist = newdist
+			self._points = newperm
+
+	def solve(self, itercnt):
+		self._dist = self._calcdist(self._points)
+		for i in range(itercnt):
+			self._improve()
+
+
+class DiscreteTile(object):
+	def __init__(self, x, y, z, dx, dz):
+		self._x = x
+		self._y = y
+		self._z = z
+		self._dx = dx
+		self._dz = dz
+	
+	@property
+	def x(self):
+		return self._x
+
+	@property
+	def y(self):
+		return self._y
+	
+	@property
+	def z(self):
+		return self._z
+
+	@property
+	def dx(self):
+		return self._dx
+
+	@property
+	def dy(self):
+		return self._y
+	
+	@property
+	def dz(self):
+		return self._dz
+
+	def __sub__(self, other):
+		return math.sqrt(((self._x - other._x) ** 2) + ((self._z - other._z) ** 2))
+
+
+
+FloatTile = collections.namedtuple("FloatTile", [ "x", "y", "z" ])
+tiles = [ ]
+for layer in xml.g:
+	if (layer.get("inkscape:groupmode") == "layer"):
+		height = int(layer.get("inkscape:label"))
+		traverser = LayerTraverser(layer)
+		for rectpos in traverser.result:
+			tiles.append(FloatTile(rectpos[0], height, rectpos[1]))
+
+
+tsp = TSP()
+for tile in sorted(tiles, key = lambda tile: (tile.x * tile.z)):
+	tsp.register(tile.x, tile.z, tile)
+print("Calculating TSP...")
+tsp.solve(150000)
+
+
+lasttile = None
+disctiles = [ ]
+for tile in tsp:
+	if lasttile is None:
+		tile = DiscreteTile(tile.x, tile.y, tile.z, 0, 0)
+	else:
+		xdiff = tile.x - lasttile.x
+		zdiff = tile.z - lasttile.z
+
+		xdiff_disc = xdiff / tilewidth * gridtiles
+		zdiff_disc = zdiff / tileheight * gridtiles
+
+		(rounded_x, rounded_z) = (round(xdiff_disc), round(zdiff_disc))
+		tile = DiscreteTile(tile.x, tile.y, tile.z, lasttile.dx + rounded_x, lasttile.dz + rounded_z)
+		
+	disctiles.append(tile)
+	lasttile = tile
+
+
+tiles = [ Tile(tile.dx, tile.dy, tile.dz) for tile in disctiles ]
+
+if len(tiles) != len(set(tiles)):
+	raise Exception("Duplicate tiles!")
+
+for tile in tiles:
+	for othertile in tiles:
+		if tile == othertile:
+			continue
+		if tile.y != othertile.y:
+			continue
+		if abs(tile.x - othertile.x) >= gridtiles:
+			continue
+		if abs(tile.z - othertile.z) >= gridtiles:
+			continue
+		print("Overlap:", tile, othertile)
+
+minx = min(tile.x for tile in tiles)
+miny = min(tile.y for tile in tiles)
+minz = min(tile.z for tile in tiles)
+
+xml = XMLNode("layout")
+xml["grid"] = str(gridtiles)
+xml["name"] = name
+for tile in sorted(tiles, key = lambda x: (x.x, x.z, x.y)):
+	(x, y, z) = (tile.x - minx, tile.y - miny, tile.z - minz)
+#	print("Tile: %2d %2d %2d" % (x, y, z))
+	xml.addchild("piece", x = str(x), y = str(y), z = str(z))
+
+xml.write(open(xmlfilename, "w"), pretty = True)
+
